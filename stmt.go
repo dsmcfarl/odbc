@@ -5,9 +5,11 @@
 package odbc
 
 import (
+	"context"
 	"database/sql/driver"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/alexbrainman/odbc/api"
 )
@@ -96,6 +98,50 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 		s.os = os
 	}
 	err := s.os.Exec(args, s.c)
+	if err != nil {
+		return nil, err
+	}
+	err = s.os.BindColumns()
+	if err != nil {
+		return nil, err
+	}
+	s.os.usedByRows = true // now both Stmt and Rows refer to it
+	return &Rows{os: s.os}, nil
+}
+
+func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	if s.os == nil {
+		return nil, errors.New("Stmt is closed")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// TODO:
+	var timeout api.SQLULEN
+	deadline, ok := ctx.Deadline()
+	if ok {
+		diff := deadline.Sub(time.Now())
+		timeout = api.SQLULEN(diff.Seconds())
+	}
+	//fmt.Printf("%v: using timeout=%d\n", time.Now(), timeout)
+	// Using SQLSetStmtAttr does not work
+	ret := api.SQLSetStmtOption(s.os.h, api.SQL_QUERY_TIMEOUT, timeout)
+	if ret != api.SQL_SUCCESS {
+		return nil, errors.New("SQLSetStmtAttr error")
+	}
+	if s.os.usedByRows {
+		s.os.closeByStmt()
+		s.os = nil
+		os, err := s.c.PrepareODBCStmt(s.query)
+		if err != nil {
+			return nil, err
+		}
+		s.os = os
+	}
+	valArgs := make([]driver.Value, 0, len(args))
+	for _, val := range args {
+		valArgs = append(valArgs, val.Value)
+	}
+	err := s.os.Exec(valArgs, s.c)
 	if err != nil {
 		return nil, err
 	}

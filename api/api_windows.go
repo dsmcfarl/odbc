@@ -97,6 +97,8 @@ const (
 	SQL_AUTOCOMMIT_ON      = 1
 	SQL_AUTOCOMMIT_DEFAULT = SQL_AUTOCOMMIT_ON
 
+	SQL_QUERY_TIMEOUT = 0
+
 	SQL_IS_UINTEGER = -5
 
 	//Connection pooling

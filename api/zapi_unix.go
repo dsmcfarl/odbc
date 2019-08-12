@@ -124,3 +124,8 @@ func SQLSetConnectAttr(connectionHandle SQLHDBC, attribute SQLINTEGER, valuePtr 
 	r := C.SQLSetConnectAttrW(C.SQLHDBC(connectionHandle), C.SQLINTEGER(attribute), C.SQLPOINTER(valuePtr), C.SQLINTEGER(stringLength))
 	return SQLRETURN(r)
 }
+
+func SQLSetStmtOption(statementHandle SQLHSTMT, option SQLUSMALLINT, value SQLULEN) (ret SQLRETURN) {
+	r := C.SQLSetStmtOption(C.SQLHSTMT(statementHandle), C.SQLUSMALLINT(option), C.SQLULEN(value))
+	return SQLRETURN(r)
+}
