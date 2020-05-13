@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -115,18 +116,27 @@ func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driv
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// TODO:
+	// Make sure context has not timed out or been canceled
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Check for a deadline
 	var timeout api.SQLULEN
 	deadline, ok := ctx.Deadline()
 	if ok {
+		// Context has a deadline
 		diff := deadline.Sub(time.Now())
 		timeout = api.SQLULEN(diff.Seconds())
-	}
-	//fmt.Printf("%v: using timeout=%d\n", time.Now(), timeout)
-	// Using SQLSetStmtAttr does not work
-	ret := api.SQLSetStmtOption(s.os.h, api.SQL_QUERY_TIMEOUT, timeout)
-	if ret != api.SQL_SUCCESS {
-		return nil, errors.New("SQLSetStmtAttr error")
+		// Do not want to set to zero as that means no timeout
+		if timeout < 1 {
+			timeout = 1
+		}
+		// Using SQLSetStmtAttr does not work
+		ret := api.SQLSetStmtOption(s.os.h, api.SQL_QUERY_TIMEOUT, timeout)
+		if ret != api.SQL_SUCCESS {
+			return nil, fmt.Errorf("SQLSetStmtOption: error = %d", ret)
+		}
 	}
 	if s.os.usedByRows {
 		s.os.closeByStmt()

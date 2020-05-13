@@ -8,6 +8,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"strings"
+	"time"
 	"unsafe"
 
 	"github.com/alexbrainman/odbc/api"
@@ -42,6 +43,11 @@ func (e *Error) Error() string {
 
 func NewError(apiName string, handle interface{}) error {
 	h, ht, herr := ToHandleAndType(handle)
+	// Extreme wierdness here: without this Sleep call, api.SQLGetDiagRec
+	// returns -2 (SQL_INVALID_HANDLE) when the Sage ODBC driver returns an
+	// error. It sets the msg and state even though it returns -2 though.
+	// Putting a fmt.Printf("blah\n") statement also works.
+	time.Sleep(1 * time.Millisecond)
 	if herr != nil {
 		return herr
 	}
@@ -49,8 +55,12 @@ func NewError(apiName string, handle interface{}) error {
 	var ne api.SQLINTEGER
 	state := make([]uint16, 6)
 	msg := make([]uint16, api.SQL_MAX_MESSAGE_LENGTH)
-	for i := 1; ; i++ {
-		ret := api.SQLGetDiagRec(ht, h, api.SQLSMALLINT(i),
+	// More wierdness here: using i := 1 and then putting api.SQLSMALLINT(i) in
+	// the call to SQLGetDiagRec results in i getting set to 0 after/during the
+	// call to SQLGetDiagRec. This results in an infinite loop. This seems to
+	// work though.
+	for i := api.SQLSMALLINT(1); ; i++ {
+		ret := api.SQLGetDiagRec(ht, h, i,
 			(*api.SQLWCHAR)(unsafe.Pointer(&state[0])), &ne,
 			(*api.SQLWCHAR)(unsafe.Pointer(&msg[0])),
 			api.SQLSMALLINT(len(msg)), nil)
